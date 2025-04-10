@@ -98,6 +98,15 @@ def generate_grade_distribution(schedule_list):
     grade_columns = ["A", "A-", "A+", "AU", "B", "B-", "B+", "C", "C-", "C+", "D", "D-", "D+", "E", "F"]
     distributions = {}
     
+    # GPA values for each grade
+    gpa_values = {
+        "A+": 4.0, "A": 4.0, "A-": 3.7,
+        "B+": 3.3, "B": 3.0, "B-": 2.7,
+        "C+": 2.3, "C": 2.0, "C-": 1.7,
+        "D+": 1.3, "D": 1.0, "D-": 0.7,
+        "F": 0.0, "E": 0.0
+    }
+    
     for course in schedule_list:
         course_num = str(course.get("Course Number", ""))
         row_match = full_df[full_df["Course Number"].astype(str) == course_num]
@@ -105,8 +114,35 @@ def generate_grade_distribution(schedule_list):
             distributions[course_num] = "Course not found"
         else:
             row = row_match.iloc[0]
+            # Get individual grade distributions
             distribution = {g: float(row[g]) if pd.notna(row[g]) else 0 for g in grade_columns if g in row}
-            distributions[course_num] = distribution
+            
+            # Calculate combined letter grade distributions
+            combined_dist = {
+                "A": sum(distribution.get(g, 0) for g in ["A+", "A", "A-"]),
+                "B": sum(distribution.get(g, 0) for g in ["B+", "B", "B-"]),
+                "C": sum(distribution.get(g, 0) for g in ["C+", "C", "C-"]),
+                "D": sum(distribution.get(g, 0) for g in ["D+", "D", "D-"]),
+                "F": distribution.get("F", 0) + distribution.get("E", 0)
+            }
+            
+            # Calculate average GPA
+            total_weighted_gpa = 0
+            total_students = 0
+            for grade, percentage in distribution.items():
+                if grade != "AU" and grade in gpa_values:  # Skip AU (audit) grades
+                    total_weighted_gpa += gpa_values[grade] * percentage
+                    total_students += percentage
+            
+            avg_gpa = total_weighted_gpa / total_students if total_students > 0 else 0
+            
+            # Store all data
+            distributions[course_num] = {
+                "detailed": distribution,
+                "combined": combined_dist,
+                "avg_gpa": round(avg_gpa, 2)
+            }
+    
     return distributions
 
 def ask_question_about_courses(question, schedule_list):
@@ -261,23 +297,40 @@ def get_grades():
         
         grade_dist = generate_grade_distribution(schedule_list)
         
+        # Calculate insights about GPAs
+        gpa_insights = []
+        course_gpas = []
+        
+        for course_num, dist_data in grade_dist.items():
+            if isinstance(dist_data, dict) and "avg_gpa" in dist_data:
+                course_gpas.append((course_num, dist_data["avg_gpa"]))
+        
+        if course_gpas:
+            course_gpas.sort(key=lambda x: x[1], reverse=True)
+            highest_gpa = course_gpas[0]
+            gpa_insights.append(f"Course {highest_gpa[0]} has the highest average GPA of {highest_gpa[1]:.2f}.")
+            
+            if len(course_gpas) > 1:
+                lowest_gpa = course_gpas[-1]
+                gpa_insights.append(f"Course {lowest_gpa[0]} has the lowest average GPA of {lowest_gpa[1]:.2f}.")
+        
         # Calculate A-grade percentages for insights
         a_percentages = []
-        for course_num, dist in grade_dist.items():
-            if isinstance(dist, dict):
-                a_grades = sum(dist.get(g, 0) for g in ["A", "A+", "A-"])
-                if a_grades > 0:
-                    a_percentages.append((course_num, a_grades))
+        for course_num, dist_data in grade_dist.items():
+            if isinstance(dist_data, dict) and "combined" in dist_data:
+                a_grade = dist_data["combined"]["A"]
+                if a_grade > 0:
+                    a_percentages.append((course_num, a_grade))
         
-        insights = []
+        insights = gpa_insights
         if a_percentages:
             a_percentages.sort(key=lambda x: x[1], reverse=True)
             highest_a = a_percentages[0]
-            insights.append(f"Course {highest_a[0]} has the highest percentage of A grades in your schedule.")
+            insights.append(f"Course {highest_a[0]} has the highest percentage of A grades ({highest_a[1]:.1f}%).")
             
             if len(a_percentages) > 1:
                 lowest_a = a_percentages[-1]
-                insights.append(f"Course {lowest_a[0]} has the lowest percentage of A grades among your selected courses.")
+                insights.append(f"Course {lowest_a[0]} has the lowest percentage of A grades ({lowest_a[1]:.1f}%).")
         
         return jsonify({
             'status': 'success',
