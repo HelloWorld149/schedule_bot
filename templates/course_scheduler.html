@@ -1,0 +1,653 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>CourseBot 2025 - Schedule Builder</title>
+    <meta charset="UTF-8">
+    <meta name="description" content="Course Schedule Builder">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0-alpha1/dist/css/bootstrap.min.css" rel="stylesheet">
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            margin: 0;
+            padding: 0;
+        }
+        
+        .header {
+            padding: 40px;
+            text-align: center;
+            background: #1abc9c;
+            color: white;
+            font-size: 24px;
+        }
+        
+        .container {
+            margin-top: 20px;
+        }
+        
+        .card {
+            margin-bottom: 20px;
+            border-radius: 10px;
+            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+        }
+        
+        .card-header {
+            background-color: #1abc9c;
+            color: white;
+            font-weight: bold;
+            border-top-left-radius: 10px;
+            border-top-right-radius: 10px;
+        }
+        
+        .btn-primary {
+            background-color: #1abc9c;
+            border-color: #1abc9c;
+        }
+        
+        .btn-primary:hover {
+            background-color: #16a085;
+            border-color: #16a085;
+        }
+        
+        .schedule-table {
+            width: 100%;
+        }
+        
+        .schedule-table th {
+            background-color: #f2f2f2;
+        }
+        
+        .loading-spinner {
+            display: none;
+            text-align: center;
+            margin: 20px 0;
+        }
+        
+        .conflict-alert {
+            background-color: #ffe0e0;
+            color: #d8000c;
+            padding: 10px;
+            margin: 10px 0;
+            border-radius: 5px;
+            display: none;
+        }
+        
+        .emoji {
+            font-size: 1.2em;
+        }
+        
+        #student-form, #instructions-form {
+            display: block;
+        }
+        
+        #schedule-section, #operations-section, #grades-section, #qa-section {
+            display: none;
+        }
+        
+        .nav-tabs .nav-link.active {
+            background-color: #1abc9c;
+            color: white;
+        }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h1>🎓 CourseBot 2025 🎓</h1>
+        <p>Your personal AI assistant for course scheduling</p>
+    </div>
+    
+    <div class="container">
+        <!-- Alert for data loading issues -->
+        <div class="alert alert-danger" role="alert" id="data-loading-alert" style="{{ 'display:none;' if data_loaded else '' }}">
+            Warning: Course data could not be loaded. Please make sure the "courses for CS.xlsx" file exists.
+        </div>
+        
+        <!-- Step 1: Student Information -->
+        <div class="card" id="student-form">
+            <div class="card-header">
+                Step 1: Tell me about yourself
+            </div>
+            <div class="card-body">
+                <p>To help create the best schedule for you, I'd like to know a bit about you.</p>
+                <form id="student-info-form">
+                    <div class="mb-3">
+                        <label for="name" class="form-label">What's your name?</label>
+                        <input type="text" class="form-control" id="name" required>
+                    </div>
+                    <div class="mb-3">
+                        <label for="year" class="form-label">What year are you in?</label>
+                        <select class="form-control" id="year" required>
+                            <option value="">Select year</option>
+                            <option value="Freshman">Freshman</option>
+                            <option value="Sophomore">Sophomore</option>
+                            <option value="Junior">Junior</option>
+                            <option value="Senior">Senior</option>
+                            <option value="Graduate">Graduate</option>
+                        </select>
+                    </div>
+                    <div class="mb-3">
+                        <label for="major" class="form-label">What's your major or area of focus?</label>
+                        <input type="text" class="form-control" id="major" required>
+                    </div>
+                    <div class="mb-3">
+                        <label for="interests" class="form-label">What areas of computer science interest you the most?</label>
+                        <textarea class="form-control" id="interests" rows="2" required></textarea>
+                    </div>
+                    <button type="submit" class="btn btn-primary">Continue</button>
+                </form>
+            </div>
+        </div>
+        
+        <!-- Step 2: Schedule Instructions -->
+        <div class="card" id="instructions-form" style="display: none;">
+            <div class="card-header">
+                Step 2: What kind of schedule would you like?
+            </div>
+            <div class="card-body">
+                <p>Please tell me what you're looking for in your courses. For example:</p>
+                <ul>
+                    <li>'I want 3 AI courses that avoid time conflicts'</li>
+                    <li>'I need evening classes on Mondays and Wednesdays'</li>
+                    <li>'I'm interested in graduate-level machine learning courses'</li>
+                </ul>
+                <form id="schedule-instructions-form">
+                    <div class="mb-3">
+                        <label for="instruction" class="form-label">What are you looking for in your schedule?</label>
+                        <textarea class="form-control" id="instruction" rows="3" required></textarea>
+                    </div>
+                    <button type="submit" class="btn btn-primary">Generate Schedule</button>
+                </form>
+                <div class="loading-spinner" id="schedule-loading">
+                    <div class="spinner-border text-primary" role="status">
+                        <span class="visually-hidden">Loading...</span>
+                    </div>
+                    <p>Creating your personalized schedule...</p>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Step 3: Schedule Results -->
+        <div class="card" id="schedule-section">
+            <div class="card-header">
+                📚 Your Personalized Schedule
+            </div>
+            <div class="card-body">
+                <div id="schedule-summary"></div>
+                <div class="conflict-alert" id="conflict-alert">
+                    <strong>⚠️ Schedule Conflicts Detected!</strong>
+                    <p id="conflict-details"></p>
+                    <button id="resolve-conflicts-btn" class="btn btn-warning">Resolve Conflicts</button>
+                </div>
+                <div class="table-responsive">
+                    <table class="table table-striped schedule-table" id="schedule-table">
+                        <thead>
+                            <tr>
+                                <th>Course Number</th>
+                                <th>Course Name</th>
+                                <th>Schedule</th>
+                                <th>Area</th>
+                                <th>Level</th>
+                            </tr>
+                        </thead>
+                        <tbody id="schedule-body">
+                            <!-- Schedule will be populated here -->
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Step 4: Operations -->
+        <div class="card" id="operations-section">
+            <div class="card-header">
+                📋 What would you like to do next?
+            </div>
+            <div class="card-body">
+                <ul class="nav nav-tabs" id="operationTabs" role="tablist">
+                    <li class="nav-item" role="presentation">
+                        <button class="nav-link active" id="update-tab" data-bs-toggle="tab" data-bs-target="#update" type="button" role="tab">
+                            ✏️ Update Schedule
+                        </button>
+                    </li>
+                    <li class="nav-item" role="presentation">
+                        <button class="nav-link" id="grades-tab" data-bs-toggle="tab" data-bs-target="#grades" type="button" role="tab">
+                            📊 Grade Distribution
+                        </button>
+                    </li>
+                    <li class="nav-item" role="presentation">
+                        <button class="nav-link" id="questions-tab" data-bs-toggle="tab" data-bs-target="#questions" type="button" role="tab">
+                            ❓ Ask Questions
+                        </button>
+                    </li>
+                    <li class="nav-item" role="presentation">
+                        <button class="nav-link" id="save-tab" data-bs-toggle="tab" data-bs-target="#save" type="button" role="tab">
+                            💾 Save Schedule
+                        </button>
+                    </li>
+                </ul>
+                
+                <div class="tab-content" id="operationTabContent">
+                    <!-- Update Schedule Tab -->
+                    <div class="tab-pane fade show active" id="update" role="tabpanel">
+                        <div class="mt-3">
+                            <h5>Refine your schedule</h5>
+                            <p>How would you like to modify your schedule? You can:</p>
+                            <ul>
+                                <li>Add specific courses</li>
+                                <li>Remove courses you're not interested in</li>
+                                <li>Change the schedule balance</li>
+                                <li>Focus on different areas</li>
+                            </ul>
+                            <form id="update-schedule-form">
+                                <div class="mb-3">
+                                    <label for="feedback" class="form-label">What changes would you like to make?</label>
+                                    <textarea class="form-control" id="feedback" rows="2" required></textarea>
+                                </div>
+                                <button type="submit" class="btn btn-primary">Update Schedule</button>
+                            </form>
+                            <div class="loading-spinner" id="update-loading">
+                                <div class="spinner-border text-primary" role="status">
+                                    <span class="visually-hidden">Loading...</span>
+                                </div>
+                                <p>Updating your schedule...</p>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- Grade Distribution Tab -->
+                    <div class="tab-pane fade" id="grades" role="tabpanel">
+                        <div class="mt-3">
+                            <h5>Grade Distribution Analysis</h5>
+                            <button id="get-grades-btn" class="btn btn-primary mb-3">Get Grade Distributions</button>
+                            <div class="loading-spinner" id="grades-loading">
+                                <div class="spinner-border text-primary" role="status">
+                                    <span class="visually-hidden">Loading...</span>
+                                </div>
+                                <p>Analyzing grade data...</p>
+                            </div>
+                            <div id="grade-insights" class="alert alert-info" style="display: none;"></div>
+                            <div class="table-responsive">
+                                <table class="table table-striped" id="grades-table" style="display: none;">
+                                    <thead>
+                                        <tr id="grades-header">
+                                            <th>Course Number</th>
+                                            <!-- Grade headers will be added dynamically -->
+                                        </tr>
+                                    </thead>
+                                    <tbody id="grades-body">
+                                        <!-- Grade data will be populated here -->
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- Ask Questions Tab -->
+                    <div class="tab-pane fade" id="questions" role="tabpanel">
+                        <div class="mt-3">
+                            <h5>Ask About Your Courses</h5>
+                            <p>What would you like to know about your courses, professors, or schedule?</p>
+                            <p>Examples:</p>
+                            <ul>
+                                <li>'Who teaches the machine learning course?'</li>
+                                <li>'Which professor has the highest percentage of A grades?'</li>
+                                <li>'What are the prerequisites for these courses?'</li>
+                            </ul>
+                            <form id="ask-question-form">
+                                <div class="mb-3">
+                                    <label for="question" class="form-label">Your question:</label>
+                                    <textarea class="form-control" id="question" rows="2" required></textarea>
+                                </div>
+                                <button type="submit" class="btn btn-primary">Ask</button>
+                            </form>
+                            <div class="loading-spinner" id="question-loading">
+                                <div class="spinner-border text-primary" role="status">
+                                    <span class="visually-hidden">Loading...</span>
+                                </div>
+                                <p>Researching your question...</p>
+                            </div>
+                            <div class="card mt-3" id="answer-card" style="display: none;">
+                                <div class="card-header">Answer</div>
+                                <div class="card-body">
+                                    <p id="answer-text"></p>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- Save Schedule Tab -->
+                    <div class="tab-pane fade" id="save" role="tabpanel">
+                        <div class="mt-3">
+                            <h5>Save Your Schedule</h5>
+                            <p>Save your current schedule as a JSON file.</p>
+                            <button id="save-schedule-btn" class="btn btn-primary">Download Schedule</button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0-alpha1/dist/js/bootstrap.bundle.min.js"></script>
+    <script>
+        $(document).ready(function() {
+            // Store the current schedule
+            let currentSchedule = [];
+            let studentName = "";
+            
+            // Handle student info form submission
+            $("#student-info-form").submit(function(e) {
+                e.preventDefault();
+                
+                // Show loading
+                $(this).find("button").prop("disabled", true).html('<span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span> Saving...');
+                
+                // Get student info
+                studentName = $("#name").val();
+                const studentInfo = {
+                    name: $("#name").val(),
+                    year: $("#year").val(),
+                    major: $("#major").val(),
+                    interests: $("#interests").val()
+                };
+                
+                // Save student info
+                $.post("/save_student_info", studentInfo, function(response) {
+                    if (response.status === "success") {
+                        // Hide student form, show instructions form
+                        $("#student-form").hide();
+                        $("#instructions-form").show();
+                    } else {
+                        alert("Error: " + response.message);
+                    }
+                    
+                    // Enable button
+                    $("#student-info-form button").prop("disabled", false).text("Continue");
+                }).fail(function() {
+                    alert("Failed to save student information. Please try again.");
+                    $("#student-info-form button").prop("disabled", false).text("Continue");
+                });
+            });
+            
+            // Handle schedule instructions form submission
+            $("#schedule-instructions-form").submit(function(e) {
+                e.preventDefault();
+                
+                // Show loading
+                $("#schedule-loading").show();
+                $(this).find("button").prop("disabled", true);
+                
+                // Get instruction
+                const instruction = $("#instruction").val();
+                
+                // Generate schedule
+                $.post("/generate_schedule", { instruction: instruction }, function(response) {
+                    if (response.status === "success") {
+                        // Store the schedule
+                        currentSchedule = response.schedule;
+                        
+                        // Display schedule summary
+                        const summary = `<p>I've created a schedule with <strong>${response.courseCount} courses</strong> for you, ${studentName}!</p>
+                                       <p>The schedule includes courses in ${response.areas.join(", ")}.</p>`;
+                        $("#schedule-summary").html(summary);
+                        
+                        // Populate schedule table
+                        populateScheduleTable(response.schedule);
+                        
+                        // Check for conflicts
+                        if (response.conflicts && response.conflicts.length > 0) {
+                            showConflicts(response.conflicts);
+                        } else {
+                            $("#conflict-alert").hide();
+                        }
+                        
+                        // Show schedule section and operations section
+                        $("#instructions-form").hide();
+                        $("#schedule-section").show();
+                        $("#operations-section").show();
+                    } else {
+                        alert("Error: " + response.message);
+                    }
+                    
+                    // Hide loading, enable button
+                    $("#schedule-loading").hide();
+                    $("#schedule-instructions-form button").prop("disabled", false);
+                }).fail(function() {
+                    alert("Failed to generate schedule. Please try again.");
+                    $("#schedule-loading").hide();
+                    $("#schedule-instructions-form button").prop("disabled", false);
+                });
+            });
+            
+            // Handle update schedule form submission
+            $("#update-schedule-form").submit(function(e) {
+                e.preventDefault();
+                
+                // Show loading
+                $("#update-loading").show();
+                $(this).find("button").prop("disabled", true);
+                
+                // Get feedback
+                const feedback = $("#feedback").val();
+                
+                // Update schedule
+                $.post("/update_schedule", { feedback: feedback }, function(response) {
+                    if (response.status === "success") {
+                        // Store the updated schedule
+                        currentSchedule = response.schedule;
+                        
+                        // Populate schedule table
+                        populateScheduleTable(response.schedule);
+                        
+                        // Check for conflicts
+                        if (response.conflicts && response.conflicts.length > 0) {
+                            showConflicts(response.conflicts);
+                        } else {
+                            $("#conflict-alert").hide();
+                        }
+                        
+                        // Show success message
+                        alert("Schedule updated successfully!");
+                    } else {
+                        alert("Error: " + response.message);
+                    }
+                    
+                    // Hide loading, enable button
+                    $("#update-loading").hide();
+                    $("#update-schedule-form button").prop("disabled", false);
+                }).fail(function() {
+                    alert("Failed to update schedule. Please try again.");
+                    $("#update-loading").hide();
+                    $("#update-schedule-form button").prop("disabled", false);
+                });
+            });
+            
+            // Handle get grades button click
+            $("#get-grades-btn").click(function() {
+                // Show loading
+                $("#grades-loading").show();
+                $(this).prop("disabled", true);
+                
+                // Get grade distribution
+                $.post("/get_grade_distribution", function(response) {
+                    if (response.status === "success") {
+                        // Display grade insights
+                        if (response.insights && response.insights.length > 0) {
+                            $("#grade-insights").html(response.insights.join("<br>")).show();
+                        } else {
+                            $("#grade-insights").hide();
+                        }
+                        
+                        // Populate grade table
+                        populateGradeTable(response.grade_distribution);
+                    } else {
+                        alert("Error: " + response.message);
+                    }
+                    
+                    // Hide loading, enable button
+                    $("#grades-loading").hide();
+                    $("#get-grades-btn").prop("disabled", false);
+                }).fail(function() {
+                    alert("Failed to get grade distribution. Please try again.");
+                    $("#grades-loading").hide();
+                    $("#get-grades-btn").prop("disabled", false);
+                });
+            });
+            
+            // Handle ask question form submission
+            $("#ask-question-form").submit(function(e) {
+                e.preventDefault();
+                
+                // Show loading
+                $("#question-loading").show();
+                $(this).find("button").prop("disabled", true);
+                
+                // Get question
+                const question = $("#question").val();
+                
+                // Ask question
+                $.post("/ask_question", { question: question }, function(response) {
+                    if (response.status === "success") {
+                        // Display answer
+                        $("#answer-text").html(response.answer.replace(/\n/g, "<br>"));
+                        $("#answer-card").show();
+                    } else {
+                        alert("Error: " + response.message);
+                    }
+                    
+                    // Hide loading, enable button
+                    $("#question-loading").hide();
+                    $("#ask-question-form button").prop("disabled", false);
+                }).fail(function() {
+                    alert("Failed to get answer. Please try again.");
+                    $("#question-loading").hide();
+                    $("#ask-question-form button").prop("disabled", false);
+                });
+            });
+            
+            // Handle resolve conflicts button click
+            $("#resolve-conflicts-btn").click(function() {
+                // Show loading
+                $(this).prop("disabled", true).html('<span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span> Resolving...');
+                
+                // Resolve conflicts
+                $.post("/resolve_conflicts", function(response) {
+                    if (response.status === "success") {
+                        // Store the updated schedule
+                        currentSchedule = response.schedule;
+                        
+                        // Populate schedule table
+                        populateScheduleTable(response.schedule);
+                        
+                        // Check if conflicts were resolved
+                        if (response.resolved) {
+                            $("#conflict-alert").hide();
+                            alert("All conflicts resolved successfully!");
+                        } else {
+                            showConflicts(response.conflicts);
+                            alert("Some conflicts could not be resolved. You may need to manually adjust your schedule.");
+                        }
+                    } else {
+                        alert("Error: " + response.message);
+                    }
+                    
+                    // Enable button
+                    $("#resolve-conflicts-btn").prop("disabled", false).text("Resolve Conflicts");
+                }).fail(function() {
+                    alert("Failed to resolve conflicts. Please try again.");
+                    $("#resolve-conflicts-btn").prop("disabled", false).text("Resolve Conflicts");
+                });
+            });
+            
+            // Handle save schedule button click
+            $("#save-schedule-btn").click(function() {
+                if (currentSchedule.length === 0) {
+                    alert("No schedule to save. Please generate a schedule first.");
+                    return;
+                }
+                
+                // Create a blob and download link
+                const scheduleJson = JSON.stringify(currentSchedule, null, 2);
+                const blob = new Blob([scheduleJson], { type: "application/json" });
+                const url = URL.createObjectURL(blob);
+                
+                // Create temporary link element and trigger download
+                const a = document.createElement("a");
+                a.href = url;
+                a.download = "my_schedule.json";
+                document.body.appendChild(a);
+                a.click();
+                document.body.removeChild(a);
+                URL.revokeObjectURL(url);
+            });
+            
+            // Function to populate schedule table
+            function populateScheduleTable(schedule) {
+                $("#schedule-body").empty();
+                
+                schedule.forEach(function(course) {
+                    $("#schedule-body").append(`
+                        <tr>
+                            <td>${course["Course Number"]}</td>
+                            <td>${course["Course Name"]}</td>
+                            <td>${course["Course Schedule"] || "N/A"}</td>
+                            <td>${course["Course Area"] || "N/A"}</td>
+                            <td>${course["Undergraudate/Graduate"] || "N/A"}</td>
+                        </tr>
+                    `);
+                });
+            }
+            
+            // Function to populate grade table
+            function populateGradeTable(gradeData) {
+                // Create headers
+                const gradeHeaders = ["Course Number", "A+", "A", "A-", "B+", "B", "B-", "C+", "C", "C-", "D+", "D", "D-", "F"];
+                
+                $("#grades-header").empty();
+                gradeHeaders.forEach(function(header) {
+                    $("#grades-header").append(`<th>${header}</th>`);
+                });
+                
+                // Populate rows
+                $("#grades-body").empty();
+                
+                Object.keys(gradeData).forEach(function(courseNum) {
+                    const row = $("<tr></tr>");
+                    row.append(`<td>${courseNum}</td>`);
+                    
+                    const distribution = gradeData[courseNum];
+                    if (typeof distribution === "object") {
+                        // Add each grade column
+                        for (let i = 1; i < gradeHeaders.length; i++) {
+                            const grade = gradeHeaders[i];
+                            const value = distribution[grade] || 0;
+                            row.append(`<td>${value}</td>`);
+                        }
+                    } else {
+                        // Handle error case
+                        row.append(`<td colspan="${gradeHeaders.length - 1}">${distribution}</td>`);
+                    }
+                    
+                    $("#grades-body").append(row);
+                });
+                
+                // Show the table
+                $("#grades-table").show();
+            }
+            
+            // Function to show conflicts
+            function showConflicts(conflicts) {
+                let conflictHtml = "";
+                
+                conflicts.forEach(function(conflict) {
+                    conflictHtml += `<div>Courses ${conflict.course1} and ${conflict.course2} are scheduled at the same time: ${conflict.time}</div>`;
+                });
+                
+                $("#conflict-details").html(conflictHtml);
+                $("#conflict-alert").show();
+            }
+        });
+    </script>
+</body>
+</html>
