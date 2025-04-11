@@ -266,39 +266,16 @@
                                 <p>Analyzing grade data...</p>
                             </div>
                             <div id="grade-insights" class="alert alert-info" style="display: none;"></div>
-                            
-                            <!-- Grade display toggle buttons -->
-                            <div class="btn-group mb-3" role="group" id="grade-view-toggle" style="display: none;">
-                                <button type="button" class="btn btn-outline-primary active" id="summary-view-btn">Summary View</button>
-                                <button type="button" class="btn btn-outline-primary" id="detailed-view-btn">Detailed View</button>
-                            </div>
-                            
-                            <!-- Summary grade table -->
-                            <div class="table-responsive" id="summary-grade-table-container">
-                                <table class="table table-striped" id="summary-grades-table" style="display: none;">
+                            <div class="table-responsive">
+                                <table class="table table-striped" id="grades-table" style="display: none;">
                                     <thead>
-                                        <tr id="summary-grades-header">
+                                        <tr id="grades-header">
                                             <th>Course Number</th>
-                                            <!-- Summary grade headers will be added dynamically -->
+                                            <!-- Grade headers will be added dynamically -->
                                         </tr>
                                     </thead>
-                                    <tbody id="summary-grades-body">
-                                        <!-- Summary grade data will be populated here -->
-                                    </tbody>
-                                </table>
-                            </div>
-                            
-                            <!-- Detailed grade table -->
-                            <div class="table-responsive" id="detailed-grade-table-container" style="display: none;">
-                                <table class="table table-striped" id="detailed-grades-table">
-                                    <thead>
-                                        <tr id="detailed-grades-header">
-                                            <th>Course Number</th>
-                                            <!-- Detailed grade headers will be added dynamically -->
-                                        </tr>
-                                    </thead>
-                                    <tbody id="detailed-grades-body">
-                                        <!-- Detailed grade data will be populated here -->
+                                    <tbody id="grades-body">
+                                        <!-- Grade data will be populated here -->
                                     </tbody>
                                 </table>
                             </div>
@@ -503,10 +480,7 @@
                         }
                         
                         // Populate grade table
-                        populateGradeTables(response.grade_distribution);
-                        
-                        // Show the toggle buttons
-                        $("#grade-view-toggle").show();
+                        populateGradeTable(response.grade_distribution);
                     } else {
                         alert("Error: " + response.message);
                     }
@@ -519,116 +493,6 @@
                     $("#grades-loading").hide();
                     $("#get-grades-btn").prop("disabled", false);
                 });
-            });
-            
-            // Function to populate both grade tables from a single distribution object
-            function populateGradeTables(gradeData) {
-                // Handle empty data
-                if (Object.keys(gradeData).length === 0) {
-                    alert("No grade data available for your courses.");
-                    return;
-                }
-                
-                // Create summary headers
-                const summaryHeaders = ["Course Number", "A (A+,A,A-)", "B (B+,B,B-)", "C (C+,C,C-)", "D (D+,D,D-)", "F", "Average GPA"];
-                
-                $("#summary-grades-header").empty();
-                summaryHeaders.forEach(function(header) {
-                    $("#summary-grades-header").append(`<th>${header}</th>`);
-                });
-                
-                // Create detailed headers
-                const detailedHeaders = ["Course Number", "A+", "A", "A-", "B+", "B", "B-", "C+", "C", "C-", "D+", "D", "D-", "F", "E"];
-                
-                $("#detailed-grades-header").empty();
-                detailedHeaders.forEach(function(header) {
-                    $("#detailed-grades-header").append(`<th>${header}</th>`);
-                });
-                
-                // Populate rows for both tables
-                $("#summary-grades-body").empty();
-                $("#detailed-grades-body").empty();
-                
-                Object.keys(gradeData).forEach(function(courseNum) {
-                    const distribution = gradeData[courseNum];
-                    
-                    if (typeof distribution === "string") {
-                        // Handle error case (course not found)
-                        const summaryRow = $("<tr></tr>");
-                        summaryRow.append(`<td>${courseNum}</td>`);
-                        summaryRow.append(`<td colspan="${summaryHeaders.length - 1}">${distribution}</td>`);
-                        $("#summary-grades-body").append(summaryRow);
-                        
-                        const detailedRow = $("<tr></tr>");
-                        detailedRow.append(`<td>${courseNum}</td>`);
-                        detailedRow.append(`<td colspan="${detailedHeaders.length - 1}">${distribution}</td>`);
-                        $("#detailed-grades-body").append(detailedRow);
-                    } else if (typeof distribution === "object") {
-                        // Handle new format with combined and detailed data
-                        if (distribution.combined && distribution.avg_gpa !== undefined) {
-                            // Summary row
-                            const summaryRow = $("<tr></tr>");
-                            summaryRow.append(`<td>${courseNum}</td>`);
-                            summaryRow.append(`<td>${distribution.combined.A.toFixed(1)}%</td>`);
-                            summaryRow.append(`<td>${distribution.combined.B.toFixed(1)}%</td>`);
-                            summaryRow.append(`<td>${distribution.combined.C.toFixed(1)}%</td>`);
-                            summaryRow.append(`<td>${distribution.combined.D.toFixed(1)}%</td>`);
-                            summaryRow.append(`<td>${distribution.combined.F.toFixed(1)}%</td>`);
-                            summaryRow.append(`<td>${distribution.avg_gpa.toFixed(2)}</td>`);
-                            $("#summary-grades-body").append(summaryRow);
-                        }
-                        
-                        if (distribution.detailed) {
-                            // Detailed row
-                            const detailedRow = $("<tr></tr>");
-                            detailedRow.append(`<td>${courseNum}</td>`);
-                            
-                            // Add each detailed grade
-                            detailedHeaders.slice(1).forEach(function(grade) {
-                                const value = distribution.detailed[grade] || 0;
-                                detailedRow.append(`<td>${value.toFixed(1)}%</td>`);
-                            });
-                            
-                            $("#detailed-grades-body").append(detailedRow);
-                        } else {
-                            // Handle old format (for backward compatibility)
-                            const detailedRow = $("<tr></tr>");
-                            detailedRow.append(`<td>${courseNum}</td>`);
-                            
-                            // Add each detailed grade using direct object properties
-                            detailedHeaders.slice(1).forEach(function(grade) {
-                                const value = distribution[grade] || 0;
-                                detailedRow.append(`<td>${value.toFixed(1)}%</td>`);
-                            });
-                            
-                            $("#detailed-grades-body").append(detailedRow);
-                        }
-                    }
-                });
-                
-                // Show the summary table by default, hide detailed
-                $("#summary-grades-table").show();
-                $("#summary-grade-table-container").show();
-                $("#detailed-grade-table-container").hide();
-                
-                // Make sure view toggle buttons are properly set
-                $("#summary-view-btn").addClass("active");
-                $("#detailed-view-btn").removeClass("active");
-            }
-            
-            // Handle grade view toggle buttons
-            $("#summary-view-btn").click(function() {
-                $("#summary-grade-table-container").show();
-                $("#detailed-grade-table-container").hide();
-                $(this).addClass("active");
-                $("#detailed-view-btn").removeClass("active");
-            });
-            
-            $("#detailed-view-btn").click(function() {
-                $("#summary-grade-table-container").hide();
-                $("#detailed-grade-table-container").show();
-                $(this).addClass("active");
-                $("#summary-view-btn").removeClass("active");
             });
             
             // Handle ask question form submission
@@ -733,6 +597,43 @@
                         </tr>
                     `);
                 });
+            }
+            
+            // Function to populate grade table
+            function populateGradeTable(gradeData) {
+                // Create headers
+                const gradeHeaders = ["Course Number", "A+", "A", "A-", "B+", "B", "B-", "C+", "C", "C-", "D+", "D", "D-", "F"];
+                
+                $("#grades-header").empty();
+                gradeHeaders.forEach(function(header) {
+                    $("#grades-header").append(`<th>${header}</th>`);
+                });
+                
+                // Populate rows
+                $("#grades-body").empty();
+                
+                Object.keys(gradeData).forEach(function(courseNum) {
+                    const row = $("<tr></tr>");
+                    row.append(`<td>${courseNum}</td>`);
+                    
+                    const distribution = gradeData[courseNum];
+                    if (typeof distribution === "object") {
+                        // Add each grade column
+                        for (let i = 1; i < gradeHeaders.length; i++) {
+                            const grade = gradeHeaders[i];
+                            const value = distribution[grade] || 0;
+                            row.append(`<td>${value}</td>`);
+                        }
+                    } else {
+                        // Handle error case
+                        row.append(`<td colspan="${gradeHeaders.length - 1}">${distribution}</td>`);
+                    }
+                    
+                    $("#grades-body").append(row);
+                });
+                
+                // Show the table
+                $("#grades-table").show();
             }
             
             // Function to show conflicts

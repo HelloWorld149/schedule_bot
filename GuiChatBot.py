@@ -115,8 +115,8 @@ def generate_grade_distribution(schedule_list):
         else:
             row = row_match.iloc[0]
             # Get individual grade distributions
-            distribution = {g: float(row[g]) if pd.notna(row[g]) else 0 for g in grade_columns if g in row}
-            
+            distribution = {g: float(row[g]) * 100 if pd.notna(row[g]) else 0 for g in grade_columns if g in row}
+            print(distribution)
             # Calculate combined letter grade distributions
             combined_dist = {
                 "A": sum(distribution.get(g, 0) for g in ["A+", "A", "A-"]),
@@ -125,6 +125,7 @@ def generate_grade_distribution(schedule_list):
                 "D": sum(distribution.get(g, 0) for g in ["D+", "D", "D-"]),
                 "F": distribution.get("F", 0) + distribution.get("E", 0)
             }
+            print(combined_dist)
             
             # Calculate average GPA
             total_weighted_gpa = 0
