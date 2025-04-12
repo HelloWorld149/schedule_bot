@@ -13,7 +13,7 @@ app = Flask(__name__)
 app.secret_key = os.urandom(24)  # Set a secret key for session
 
 # Initialize OpenAI bot with API key
-chatbot = OpenAIBot("gpt-4o-mini", "your api")
+chatbot = OpenAIBot("gpt-4o-mini", "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")
 
 # Try to load the courses dataset
 try:
@@ -115,7 +115,7 @@ def generate_grade_distribution(schedule_list):
         else:
             row = row_match.iloc[0]
             # Get individual grade distributions
-            distribution = {g: float(row[g]) if pd.notna(row[g]) else 0 for g in grade_columns if g in row}
+            distribution = {g: float(row[g]) * 100 if pd.notna(row[g]) else 0 for g in grade_columns if g in row}
             
             # Calculate combined letter grade distributions
             combined_dist = {
