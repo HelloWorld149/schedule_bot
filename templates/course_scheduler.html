@@ -49,6 +49,16 @@
             border-color: #16a085;
         }
         
+        .btn-secondary {
+            background-color: #95a5a6;
+            border-color: #95a5a6;
+        }
+        
+        .btn-secondary:hover {
+            background-color: #7f8c8d;
+            border-color: #7f8c8d;
+        }
+        
         .schedule-table {
             width: 100%;
         }
@@ -88,6 +98,11 @@
             background-color: #1abc9c;
             color: white;
         }
+        
+        .back-button {
+            display: inline-block;
+            margin-right: 10px;
+        }
     </style>
 </head>
 <body>
@@ -99,7 +114,7 @@
     <div class="container">
         <!-- Alert for data loading issues -->
         <div class="alert alert-danger" role="alert" id="data-loading-alert" style="{{ 'display:none;' if data_loaded else '' }}">
-            Warning: Course data could not be loaded. Please make sure the "courses for CS.xlsx" file exists.
+            Warning: Course data could not be loaded. Please make sure the department data files exist.
         </div>
         
         <!-- Step 1: Student Information -->
@@ -125,12 +140,30 @@
                             <option value="Graduate">Graduate</option>
                         </select>
                     </div>
+                    
                     <div class="mb-3">
                         <label for="major" class="form-label">What's your major or area of focus?</label>
-                        <input type="text" class="form-control" id="major" required>
+                        <select class="form-control" id="major" required>
+                            <option value="">Select Department</option>
+                            {% for department in departments %}
+                            <option value="{{ department }}">{{ department }}</option>
+                            {% endfor %}
+                        </select>
                     </div>
                     <div class="mb-3">
-                        <label for="interests" class="form-label">What areas of computer science interest you the most?</label>
+                        <label for="side_major" class="form-label">Do you have a secondary interest or minor? (Optional)</label>
+                        <select class="form-control" id="side_major">
+                            <option value="">None</option>
+                            {% for department in departments %}
+                            <option value="{{ department }}">{{ department }}</option>
+                            {% endfor %}
+                        </select>
+                        <small class="form-text text-muted">We'll include fewer courses from this area in your schedule.</small>
+                    </div>
+                    <div class="mb-3">
+                        <label for="interests" class="form-label">
+                            What areas of <span id="selected-major">your major</span> interest you the most?
+                        </label>
                         <textarea class="form-control" id="interests" rows="2" required></textarea>
                     </div>
                     <button type="submit" class="btn btn-primary">Continue</button>
@@ -155,7 +188,10 @@
                         <label for="instruction" class="form-label">What are you looking for in your schedule?</label>
                         <textarea class="form-control" id="instruction" rows="3" required></textarea>
                     </div>
-                    <button type="submit" class="btn btn-primary">Generate Schedule</button>
+                    <div class="d-flex justify-content-between">
+                        <button type="button" class="btn btn-secondary back-button" data-target="student-form">← Back</button>
+                        <button type="submit" class="btn btn-primary">Generate Schedule</button>
+                    </div>
                 </form>
                 <div class="loading-spinner" id="schedule-loading">
                     <div class="spinner-border text-primary" role="status">
@@ -193,6 +229,9 @@
                             <!-- Schedule will be populated here -->
                         </tbody>
                     </table>
+                </div>
+                <div class="mt-3">
+                    <button type="button" class="btn btn-secondary back-button" data-target="instructions-form">← Back to Instructions</button>
                 </div>
             </div>
         </div>
@@ -266,16 +305,39 @@
                                 <p>Analyzing grade data...</p>
                             </div>
                             <div id="grade-insights" class="alert alert-info" style="display: none;"></div>
-                            <div class="table-responsive">
-                                <table class="table table-striped" id="grades-table" style="display: none;">
+                            
+                            <!-- Grade display toggle buttons -->
+                            <div class="btn-group mb-3" role="group" id="grade-view-toggle" style="display: none;">
+                                <button type="button" class="btn btn-outline-primary active" id="summary-view-btn">Summary View</button>
+                                <button type="button" class="btn btn-outline-primary" id="detailed-view-btn">Detailed View</button>
+                            </div>
+                            
+                            <!-- Summary grade table -->
+                            <div class="table-responsive" id="summary-grade-table-container">
+                                <table class="table table-striped" id="summary-grades-table" style="display: none;">
                                     <thead>
-                                        <tr id="grades-header">
+                                        <tr id="summary-grades-header">
                                             <th>Course Number</th>
-                                            <!-- Grade headers will be added dynamically -->
+                                            <!-- Summary grade headers will be added dynamically -->
                                         </tr>
                                     </thead>
-                                    <tbody id="grades-body">
-                                        <!-- Grade data will be populated here -->
+                                    <tbody id="summary-grades-body">
+                                        <!-- Summary grade data will be populated here -->
+                                    </tbody>
+                                </table>
+                            </div>
+                            
+                            <!-- Detailed grade table -->
+                            <div class="table-responsive" id="detailed-grade-table-container" style="display: none;">
+                                <table class="table table-striped" id="detailed-grades-table">
+                                    <thead>
+                                        <tr id="detailed-grades-header">
+                                            <th>Course Number</th>
+                                            <!-- Detailed grade headers will be added dynamically -->
+                                        </tr>
+                                    </thead>
+                                    <tbody id="detailed-grades-body">
+                                        <!-- Detailed grade data will be populated here -->
                                     </tbody>
                                 </table>
                             </div>
@@ -331,10 +393,22 @@
     <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0-alpha1/dist/js/bootstrap.bundle.min.js"></script>
     <script>
+        document.addEventListener("DOMContentLoaded", function () {
+            const majorDropdown = document.getElementById("major");
+            const selectedMajorSpan = document.getElementById("selected-major");
+
+            // Update the label when the major dropdown changes
+            majorDropdown.addEventListener("change", function () {
+                const selectedMajor = majorDropdown.value || "your major";
+                selectedMajorSpan.textContent = selectedMajor;
+            });
+        });
+        
         $(document).ready(function() {
             // Store the current schedule
             let currentSchedule = [];
             let studentName = "";
+            let studentSubject = ""; // Added variable to store the student's subject/major
             
             // Handle student info form submission
             $("#student-info-form").submit(function(e) {
@@ -345,10 +419,12 @@
                 
                 // Get student info
                 studentName = $("#name").val();
+                studentSubject = $("#major").val(); // Save the selected subject/major
                 const studentInfo = {
                     name: $("#name").val(),
                     year: $("#year").val(),
                     major: $("#major").val(),
+                    side_major: $("#side_major").val(),
                     interests: $("#interests").val()
                 };
                 
@@ -388,8 +464,14 @@
                         currentSchedule = response.schedule;
                         
                         // Display schedule summary
+                        let areasText = '';
+                        if (response.areas && response.areas.length > 0) {
+                            areasText = `<p>The schedule includes courses in ${response.areas.join(", ")}.</p>`;
+                        }
+                        
                         const summary = `<p>I've created a schedule with <strong>${response.courseCount} courses</strong> for you, ${studentName}!</p>
-                                       <p>The schedule includes courses in ${response.areas.join(", ")}.</p>`;
+                                       <p>Major: ${studentSubject}</p>
+                                       ${areasText}`;
                         $("#schedule-summary").html(summary);
                         
                         // Populate schedule table
@@ -480,7 +562,10 @@
                         }
                         
                         // Populate grade table
-                        populateGradeTable(response.grade_distribution);
+                        populateGradeTables(response.grade_distribution);
+                        
+                        // Show the toggle buttons
+                        $("#grade-view-toggle").show();
                     } else {
                         alert("Error: " + response.message);
                     }
@@ -493,6 +578,116 @@
                     $("#grades-loading").hide();
                     $("#get-grades-btn").prop("disabled", false);
                 });
+            });
+            
+            // Function to populate both grade tables from a single distribution object
+            function populateGradeTables(gradeData) {
+                // Handle empty data
+                if (Object.keys(gradeData).length === 0) {
+                    alert("No grade data available for your courses.");
+                    return;
+                }
+                
+                // Create summary headers
+                const summaryHeaders = ["Course Number", "A (A+,A,A-)", "B (B+,B,B-)", "C (C+,C,C-)", "D (D+,D,D-)", "F", "Average GPA"];
+                
+                $("#summary-grades-header").empty();
+                summaryHeaders.forEach(function(header) {
+                    $("#summary-grades-header").append(`<th>${header}</th>`);
+                });
+                
+                // Create detailed headers
+                const detailedHeaders = ["Course Number", "A+", "A", "A-", "B+", "B", "B-", "C+", "C", "C-", "D+", "D", "D-", "F", "E"];
+                
+                $("#detailed-grades-header").empty();
+                detailedHeaders.forEach(function(header) {
+                    $("#detailed-grades-header").append(`<th>${header}</th>`);
+                });
+                
+                // Populate rows for both tables
+                $("#summary-grades-body").empty();
+                $("#detailed-grades-body").empty();
+                
+                Object.keys(gradeData).forEach(function(courseNum) {
+                    const distribution = gradeData[courseNum];
+                    
+                    if (typeof distribution === "string") {
+                        // Handle error case (course not found)
+                        const summaryRow = $("<tr></tr>");
+                        summaryRow.append(`<td>${courseNum}</td>`);
+                        summaryRow.append(`<td colspan="${summaryHeaders.length - 1}">${distribution}</td>`);
+                        $("#summary-grades-body").append(summaryRow);
+                        
+                        const detailedRow = $("<tr></tr>");
+                        detailedRow.append(`<td>${courseNum}</td>`);
+                        detailedRow.append(`<td colspan="${detailedHeaders.length - 1}">${distribution}</td>`);
+                        $("#detailed-grades-body").append(detailedRow);
+                    } else if (typeof distribution === "object") {
+                        // Handle new format with combined and detailed data
+                        if (distribution.combined && distribution.avg_gpa !== undefined) {
+                            // Summary row
+                            const summaryRow = $("<tr></tr>");
+                            summaryRow.append(`<td>${courseNum}</td>`);
+                            summaryRow.append(`<td>${distribution.combined.A.toFixed(1)}%</td>`);
+                            summaryRow.append(`<td>${distribution.combined.B.toFixed(1)}%</td>`);
+                            summaryRow.append(`<td>${distribution.combined.C.toFixed(1)}%</td>`);
+                            summaryRow.append(`<td>${distribution.combined.D.toFixed(1)}%</td>`);
+                            summaryRow.append(`<td>${distribution.combined.F.toFixed(1)}%</td>`);
+                            summaryRow.append(`<td>${distribution.avg_gpa.toFixed(2)}</td>`);
+                            $("#summary-grades-body").append(summaryRow);
+                        }
+                        
+                        if (distribution.detailed) {
+                            // Detailed row
+                            const detailedRow = $("<tr></tr>");
+                            detailedRow.append(`<td>${courseNum}</td>`);
+                            
+                            // Add each detailed grade
+                            detailedHeaders.slice(1).forEach(function(grade) {
+                                const value = distribution.detailed[grade] || 0;
+                                detailedRow.append(`<td>${value.toFixed(1)}%</td>`);
+                            });
+                            
+                            $("#detailed-grades-body").append(detailedRow);
+                        } else {
+                            // Handle old format (for backward compatibility)
+                            const detailedRow = $("<tr></tr>");
+                            detailedRow.append(`<td>${courseNum}</td>`);
+                            
+                            // Add each detailed grade using direct object properties
+                            detailedHeaders.slice(1).forEach(function(grade) {
+                                const value = distribution[grade] || 0;
+                                detailedRow.append(`<td>${value.toFixed(1)}%</td>`);
+                            });
+                            
+                            $("#detailed-grades-body").append(detailedRow);
+                        }
+                    }
+                });
+                
+                // Show the summary table by default, hide detailed
+                $("#summary-grades-table").show();
+                $("#summary-grade-table-container").show();
+                $("#detailed-grade-table-container").hide();
+                
+                // Make sure view toggle buttons are properly set
+                $("#summary-view-btn").addClass("active");
+                $("#detailed-view-btn").removeClass("active");
+            }
+            
+            // Handle grade view toggle buttons
+            $("#summary-view-btn").click(function() {
+                $("#summary-grade-table-container").show();
+                $("#detailed-grade-table-container").hide();
+                $(this).addClass("active");
+                $("#detailed-view-btn").removeClass("active");
+            });
+            
+            $("#detailed-view-btn").click(function() {
+                $("#summary-grade-table-container").hide();
+                $("#detailed-grade-table-container").show();
+                $(this).addClass("active");
+                $("#summary-view-btn").removeClass("active");
             });
             
             // Handle ask question form submission
@@ -575,11 +770,33 @@
                 // Create temporary link element and trigger download
                 const a = document.createElement("a");
                 a.href = url;
-                a.download = "my_schedule.json";
+                a.download = `${studentSubject.replace(/\s+/g, '_').toLowerCase()}_schedule.json`;
                 document.body.appendChild(a);
                 a.click();
                 document.body.removeChild(a);
                 URL.revokeObjectURL(url);
+            });
+
+            // Handle back buttons
+            $(document).on("click", ".back-button", function() {
+                const targetSection = $(this).data("target");
+                
+                // Hide current sections
+                $("#schedule-section, #operations-section, #instructions-form").hide();
+                
+                // Show target section
+                $("#" + targetSection).show();
+                
+                // If going back to the instructions form, we should keep the instruction text
+                if (targetSection === "instructions-form") {
+                    // Make sure operation sections are hidden
+                    $("#operations-section").hide();
+                }
+                
+                // Scroll to the top of the target section
+                $('html, body').animate({
+                    scrollTop: $("#" + targetSection).offset().top - 20
+                }, 500);
             });
             
             // Function to populate schedule table
@@ -597,43 +814,6 @@
                         </tr>
                     `);
                 });
-            }
-            
-            // Function to populate grade table
-            function populateGradeTable(gradeData) {
-                // Create headers
-                const gradeHeaders = ["Course Number", "A+", "A", "A-", "B+", "B", "B-", "C+", "C", "C-", "D+", "D", "D-", "F"];
-                
-                $("#grades-header").empty();
-                gradeHeaders.forEach(function(header) {
-                    $("#grades-header").append(`<th>${header}</th>`);
-                });
-                
-                // Populate rows
-                $("#grades-body").empty();
-                
-                Object.keys(gradeData).forEach(function(courseNum) {
-                    const row = $("<tr></tr>");
-                    row.append(`<td>${courseNum}</td>`);
-                    
-                    const distribution = gradeData[courseNum];
-                    if (typeof distribution === "object") {
-                        // Add each grade column
-                        for (let i = 1; i < gradeHeaders.length; i++) {
-                            const grade = gradeHeaders[i];
-                            const value = distribution[grade] || 0;
-                            row.append(`<td>${value}</td>`);
-                        }
-                    } else {
-                        // Handle error case
-                        row.append(`<td colspan="${gradeHeaders.length - 1}">${distribution}</td>`);
-                    }
-                    
-                    $("#grades-body").append(row);
-                });
-                
-                // Show the table
-                $("#grades-table").show();
             }
             
             // Function to show conflicts
